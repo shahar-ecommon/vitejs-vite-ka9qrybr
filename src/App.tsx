@@ -1,5 +1,29 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+const SUPABASE_URL = "https://hbzqalhbkaojavxteelm.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhienFhbGhia2FvamF2eHRlZWxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMjkzMzQsImV4cCI6MjA4ODcwNTMzNH0.D77-lMvr5_v5J1Ycj7_t3rcNXEog9bgadVALnckvrLA";
+
+async function dbLoad() {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/finance_data?id=eq.main&select=data`, {
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+  });
+  const rows = await res.json();
+  return rows?.[0]?.data || null;
+}
+
+async function dbSave(payload) {
+  await fetch(`${SUPABASE_URL}/rest/v1/finance_data?id=eq.main`, {
+    method: "PATCH",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=minimal"
+    },
+    body: JSON.stringify({ data: payload, updated_at: new Date().toISOString() })
+  });
+}
 
 const VAT_RATE = 0.18;
 const INCOME_TAX = 0.23;
@@ -1553,8 +1577,32 @@ export default function App() {
   const [selYear, setSelYear] = useState(2025);
   const [selMonth, setSelMonth] = useState(0);
   const [allYears, setAllYears] = useState(()=>({ 2025: build2025(), 2026: build2026() }));
-  // nameAliases: { "canonical name": ["alias1", "alias2", ...] }
   const [nameAliases, setNameAliases] = useState({});
+  const [dbLoaded, setDbLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
+
+  // Load from Supabase on mount
+  useEffect(()=>{
+    dbLoad().then(saved=>{
+      if(saved?.allYears) setAllYears(saved.allYears);
+      if(saved?.nameAliases) setNameAliases(saved.nameAliases);
+      setDbLoaded(true);
+    }).catch(()=>setDbLoaded(true));
+  }, []);
+
+  // Auto-save to Supabase 2 seconds after last change
+  useEffect(()=>{
+    if(!dbLoaded) return;
+    setSaving(true);
+    const t = setTimeout(()=>{
+      dbSave({ allYears, nameAliases }).then(()=>{
+        setSaving(false);
+        setLastSaved(new Date().toLocaleTimeString("he-IL"));
+      });
+    }, 2000);
+    return ()=>clearTimeout(t);
+  }, [allYears, nameAliases, dbLoaded]);
 
   const years = Object.keys(allYears).map(Number).sort();
 
@@ -1648,8 +1696,14 @@ export default function App() {
           <div className="hide-mobile" style={{color:"#94a3b8",fontSize:11,marginTop:2}}>מע״מ 18% · מס חברות 23% · נתוני 2025–2026</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          {saving ? (
+            <div style={{background:"#fef3c7",borderRadius:10,padding:"5px 10px",color:"#92400e",fontSize:11,fontWeight:700}}>💾 שומר...</div>
+          ) : lastSaved ? (
+            <div style={{background:"#dcfce7",borderRadius:10,padding:"5px 10px",color:"#16a34a",fontSize:11,fontWeight:700}}>✅ נשמר {lastSaved}</div>
+          ) : null}
           {alerts.length>0 && <div style={{background:"#fee2e2",borderRadius:10,padding:"5px 10px",color:"#dc2626",fontSize:12,fontWeight:700}}>⚠️ {alerts.length}</div>}
           <button onClick={addYear} style={{background:"#3b82f6",border:"none",color:"#fff",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ שנה</button>
+          <button onClick={()=>{if(confirm("למחוק את כל הנתונים ולחזור לברירת מחדל?")){localStorage.clear();window.location.reload();}}} style={{background:"#475569",border:"none",color:"#fff",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>↺ איפוס</button>
         </div>
       </div>
 
