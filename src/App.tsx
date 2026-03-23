@@ -298,6 +298,66 @@ function injectCSS() {
 }
 
 // vatMode: "net" = user enters net, VAT computed | "gross" = user enters gross, net computed | "custom" = user edits both
+// ===================== CONFIRM DIALOG =====================
+function ConfirmDialog({ open, title, message, confirmLabel="אישור", confirmColor="#ef4444", onConfirm, onCancel }) {
+  if(!open) return null;
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onCancel}>
+      <div style={{background:"#fff",borderRadius:16,padding:28,width:360,maxWidth:"92vw",boxShadow:"0 24px 64px rgba(0,0,0,0.22)",direction:"rtl"}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:24,marginBottom:8,textAlign:"center"}}>⚠️</div>
+        <div style={{fontWeight:800,fontSize:16,color:"#0f172a",marginBottom:8,textAlign:"center"}}>{title}</div>
+        {message && <div style={{fontSize:13,color:"#6b7280",marginBottom:20,textAlign:"center",lineHeight:1.5}}>{message}</div>}
+        <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+          <button onClick={onCancel}
+            style={{padding:"9px 22px",borderRadius:10,border:"1.5px solid #e2e8f0",background:"#fff",color:"#374151",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"inherit",flex:1}}>
+            ביטול
+          </button>
+          <button onClick={onConfirm}
+            style={{padding:"9px 22px",borderRadius:10,border:"none",background:confirmColor,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit",flex:1}}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function useConfirm() {
+  const [state, setState] = useState(null);
+  function confirm(opts) {
+    return new Promise(resolve=>{
+      setState({...opts, resolve});
+    });
+  }
+  function handleConfirm() { state.resolve(true); setState(null); }
+  function handleCancel() { state.resolve(false); setState(null); }
+  const dialog = state ? (
+    <ConfirmDialog open={true} title={state.title} message={state.message}
+      confirmLabel={state.confirmLabel} confirmColor={state.confirmColor}
+      onConfirm={handleConfirm} onCancel={handleCancel}/>
+  ) : null;
+  return [confirm, dialog];
+}
+
+// ===================== UNDO TOAST =====================
+function UndoToast({ onUndo, onDismiss, action }) {
+  useEffect(()=>{
+    const t = setTimeout(onDismiss, 5000);
+    return ()=>clearTimeout(t);
+  }, []);
+  return (
+    <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:3000,background:"#1e293b",color:"#fff",borderRadius:12,padding:"12px 20px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 32px rgba(0,0,0,0.25)",fontSize:13,fontFamily:"inherit",direction:"rtl",whiteSpace:"nowrap"}}>
+      <span>{action}</span>
+      <button onClick={onUndo}
+        style={{background:"#6366f1",border:"none",color:"#fff",borderRadius:8,padding:"5px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+        ↩ בטל
+      </button>
+      <button onClick={onDismiss}
+        style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:16,padding:"0 2px"}}>×</button>
+    </div>
+  );
+}
+
 function EntryRow({ entry, onChange, onRemove, selected, onSelect }) {
   const isMobile = useIsMobile();
   const net = parseFloat(entry.net) || 0;
@@ -386,8 +446,78 @@ function EntryRow({ entry, onChange, onRemove, selected, onSelect }) {
   );
 }
 
+// Duplicate modal
+function DuplicateModal({ count, allYears, currentYear, currentMonth, onDuplicate, onClose }) {
+  const [targetYear, setTargetYear] = useState(currentYear);
+  const [targetMonths, setTargetMonths] = useState({});
+  const years = Object.keys(allYears).map(Number).sort();
+
+  function toggleMonth(mi) {
+    setTargetMonths(s=>({...s,[mi]:!s[mi]}));
+  }
+  const selectedMonths = Object.entries(targetMonths).filter(([,v])=>v).map(([mi])=>parseInt(mi));
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
+      <div style={{background:"#fff",borderRadius:16,padding:24,width:380,maxWidth:"95vw",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",direction:"rtl"}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontWeight:800,fontSize:16,marginBottom:4,color:"#0f172a"}}>📋 שכפול פריטים</div>
+        <div style={{fontSize:12,color:"#6b7280",marginBottom:18}}>{count} פריטים נבחרו — בחר לאיזה חודשים לשכפל</div>
+
+        {/* Year selector */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#374151",marginBottom:6}}>שנה</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {years.map(y=>(
+              <button key={y} onClick={()=>{setTargetYear(y);setTargetMonths({});}}
+                style={{padding:"5px 14px",borderRadius:8,border:"1.5px solid",borderColor:targetYear===y?"#6366f1":"#e2e8f0",background:targetYear===y?"#eef2ff":"#fff",color:targetYear===y?"#4338ca":"#374151",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+                {y}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Month grid */}
+        <div style={{marginBottom:18}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#374151"}}>חודשים</div>
+            <button onClick={()=>{
+              const all = MONTHS_HE.reduce((a,_,i)=>({...a,[i]:true}),{});
+              const noneSelected = selectedMonths.length===0;
+              setTargetMonths(noneSelected?all:{});
+            }} style={{fontSize:11,color:"#6366f1",background:"none",border:"none",cursor:"pointer",fontWeight:700,fontFamily:"inherit"}}>
+              {selectedMonths.length===0?"בחר הכל":"נקה"}
+            </button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+            {MONTHS_HE.map((m,mi)=>{
+              const isCurrent = targetYear===currentYear && mi===currentMonth;
+              const sel = !!targetMonths[mi];
+              return (
+                <button key={mi} onClick={()=>!isCurrent&&toggleMonth(mi)} disabled={isCurrent}
+                  style={{padding:"6px 4px",borderRadius:8,border:"1.5px solid",borderColor:sel?"#6366f1":isCurrent?"#e2e8f0":"#e2e8f0",background:sel?"#eef2ff":isCurrent?"#f9fafb":"#fff",color:sel?"#4338ca":isCurrent?"#c4c9d4":"#374151",fontWeight:sel?700:500,fontSize:12,cursor:isCurrent?"default":"pointer",fontFamily:"inherit",opacity:isCurrent?0.5:1}}>
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{padding:"8px 16px",borderRadius:9,border:"1.5px solid #e2e8f0",background:"#fff",color:"#6b7280",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>ביטול</button>
+          <button onClick={()=>selectedMonths.length>0&&onDuplicate(targetYear,selectedMonths)}
+            disabled={selectedMonths.length===0}
+            style={{padding:"8px 16px",borderRadius:9,border:"none",background:selectedMonths.length>0?"#6366f1":"#e2e8f0",color:selectedMonths.length>0?"#fff":"#9ca3af",fontWeight:700,fontSize:13,cursor:selectedMonths.length>0?"pointer":"default",fontFamily:"inherit"}}>
+            שכפל ל-{selectedMonths.length} חודשים
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Bulk action toolbar shown when rows are selected
-function BulkToolbar({ count, onStatusChange, onDelete, onDeselect }) {
+function BulkToolbar({ count, onStatusChange, onDelete, onDeselect, onDuplicate }) {
   const isMobile = useIsMobile();
   return (
     <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px",marginBottom:8,background:"#eef2ff",borderRadius:9,border:"1.5px solid #a5b4fc",flexWrap:"wrap"}}>
@@ -400,6 +530,10 @@ function BulkToolbar({ count, onStatusChange, onDelete, onDeselect }) {
           {o.label}
         </button>
       ))}
+      <button onClick={onDuplicate}
+        style={{padding:"3px 9px",borderRadius:9999,border:"1.5px solid #a5b4fc",cursor:"pointer",background:"#eef2ff",color:"#4338ca",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>
+        📋 {isMobile?"":"שכפל"}
+      </button>
       <button onClick={onDelete}
         style={{padding:"3px 9px",borderRadius:9999,border:"1.5px solid #fca5a5",cursor:"pointer",background:"#fee2e2",color:"#dc2626",fontSize:11,fontWeight:700,fontFamily:"inherit"}}>
         🗑 {isMobile?"":"מחק"}
@@ -412,11 +546,19 @@ function BulkToolbar({ count, onStatusChange, onDelete, onDeselect }) {
   );
 }
 
-function SectionCard({ title, icon, color, total, children, onAdd }) {
+function SectionCard({ title, icon, color, total, children, onAdd, allSelected, someSelected, onSelectAll }) {
   return (
     <div style={{background:"#fff",borderRadius:12,border:`1.5px solid ${color}22`,boxShadow:"0 1px 6px rgba(0,0,0,0.04)",overflow:"hidden",marginBottom:10}}>
       <div style={{padding:"8px 12px",background:`${color}0e`,borderBottom:`1px solid ${color}20`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <span style={{fontWeight:700,fontSize:13,color:"#1f2937"}}>{icon} {title}</span>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <input type="checkbox"
+            checked={allSelected}
+            ref={el=>{ if(el) el.indeterminate = someSelected && !allSelected; }}
+            onChange={onSelectAll}
+            style={{cursor:"pointer",accentColor:color,width:14,height:14,flexShrink:0}}
+            title="סמן הכל בקטגוריה"/>
+          <span style={{fontWeight:700,fontSize:13,color:"#1f2937"}}>{icon} {title}</span>
+        </div>
         <span style={{fontWeight:800,fontSize:13,color}}>{fmt(total)}</span>
       </div>
       <div style={{padding:"8px 12px"}}>
@@ -427,8 +569,9 @@ function SectionCard({ title, icon, color, total, children, onAdd }) {
   );
 }
 
-function MonthView({ data, setData }) {
+function MonthView({ data, setData, allYears, setAllYears, currentYear, currentMonth, onConfirm, onSaveSnapshot }) {
   const [selected, setSelected] = useState({}); // { "section:cat:id": true }
+  const [showDuplicate, setShowDuplicate] = useState(false);
 
   function selKey(section, cat, id) { return `${section}:${cat}:${id}`; }
   function toggleSel(section, cat, id) {
@@ -437,6 +580,21 @@ function MonthView({ data, setData }) {
   }
   function deselectAll() { setSelected({}); }
   const selectedCount = Object.values(selected).filter(Boolean).length;
+
+  function isCatAllSelected(section, cat, entries) {
+    return entries.length > 0 && entries.every(e=>!!selected[selKey(section,cat,e.id)]);
+  }
+  function isCatSomeSelected(section, cat, entries) {
+    return entries.some(e=>!!selected[selKey(section,cat,e.id)]);
+  }
+  function toggleSelectAllInCat(section, cat, entries) {
+    const allSel = isCatAllSelected(section, cat, entries);
+    setSelected(s=>{
+      const ns = {...s};
+      entries.forEach(e=>{ ns[selKey(section,cat,e.id)] = !allSel; });
+      return ns;
+    });
+  }
 
   function bulkStatusChange(status) {
     setData(d=>{
@@ -453,7 +611,10 @@ function MonthView({ data, setData }) {
     });
     deselectAll();
   }
-  function bulkDelete() {
+  async function bulkDelete() {
+    const ok = await onConfirm({title:`מחיקת ${selectedCount} פריטים`,message:"הפריטים שנבחרו יימחקו. ניתן לבטל עם כפתור Undo.",confirmLabel:"מחק",confirmColor:"#ef4444"});
+    if(!ok) return;
+    onSaveSnapshot(`מחיקת ${selectedCount} פריטים`);
     setData(d=>{
       const nd = JSON.parse(JSON.stringify(d));
       Object.entries(selected).forEach(([k,v])=>{
@@ -468,10 +629,38 @@ function MonthView({ data, setData }) {
     deselectAll();
   }
 
+  function bulkDuplicate(targetYear, targetMonths) {
+    // Collect selected entries with their section/cat
+    const toDup = [];
+    Object.entries(selected).forEach(([k,v])=>{
+      if(!v) return;
+      const [section,cat] = k.split(":");
+      const id = k.split(":").slice(2).join(":");
+      const arr = data[section][cat];
+      const entry = arr.find(e=>e.id===id);
+      if(entry) toDup.push({ section, cat, entry });
+    });
+
+    setAllYears(ay=>{
+      const nd = JSON.parse(JSON.stringify(ay));
+      if(!nd[targetYear]) nd[targetYear] = Array.from({length:12}, initMonth);
+      targetMonths.forEach(mi=>{
+        toDup.forEach(({section,cat,entry})=>{
+          nd[targetYear][mi][section][cat].push({...entry, id: genId(), reminderSent:"", reminderCount:0});
+        });
+      });
+      return nd;
+    });
+    setShowDuplicate(false);
+    deselectAll();
+    alert(`✅ שוכפלו ${toDup.length} פריטים ל-${targetMonths.length} חודשים`);
+  }
+
   function upd(section, cat, idx, val) {
     setData(d=>{const e=[...d[section][cat]];e[idx]=val;return{...d,[section]:{...d[section],[cat]:e}};});
   }
   function rem(section, cat, idx) {
+    onSaveSnapshot("מחיקת פריט");
     setData(d=>{
       let e=d[section][cat].filter((_,i)=>i!==idx);
       if(e.length===0) e=[newEntry()];
@@ -503,6 +692,16 @@ function MonthView({ data, setData }) {
 
   return (
     <div style={{direction:"rtl"}}>
+      {showDuplicate && (
+        <DuplicateModal
+          count={selectedCount}
+          allYears={allYears}
+          currentYear={currentYear}
+          currentMonth={currentMonth}
+          onDuplicate={bulkDuplicate}
+          onClose={()=>setShowDuplicate(false)}
+        />
+      )}
       <div className="rsp-kpi-7" style={{marginBottom:14}}>
         {kpis.map(c=>(
           <div key={c.label} style={{background:"#fff",borderRadius:10,padding:"10px 12px",boxShadow:"0 1px 6px rgba(0,0,0,0.05)",borderTop:`3px solid ${c.color}`}}>
@@ -521,14 +720,17 @@ function MonthView({ data, setData }) {
       </div>
 
       {selectedCount > 0 && (
-        <BulkToolbar count={selectedCount} onStatusChange={bulkStatusChange} onDelete={bulkDelete} onDeselect={deselectAll}/>
+        <BulkToolbar count={selectedCount} onStatusChange={bulkStatusChange} onDelete={bulkDelete} onDeselect={deselectAll} onDuplicate={()=>setShowDuplicate(true)}/>
       )}
 
       <div className="rsp-2col">
         <div>
           <div style={{fontWeight:800,fontSize:14,marginBottom:8,color:"#1f2937"}}>💚 הכנסות</div>
           {INCOME_CATEGORIES.map((cat,ci)=>(
-            <SectionCard key={cat.key} title={cat.label} icon={cat.icon} color={INCOME_COLORS[ci]} total={calcNetEntries(data.income[cat.key])} onAdd={()=>add("income",cat.key)}>
+            <SectionCard key={cat.key} title={cat.label} icon={cat.icon} color={INCOME_COLORS[ci]} total={calcNetEntries(data.income[cat.key])} onAdd={()=>add("income",cat.key)}
+              allSelected={isCatAllSelected("income",cat.key,data.income[cat.key])}
+              someSelected={isCatSomeSelected("income",cat.key,data.income[cat.key])}
+              onSelectAll={()=>toggleSelectAllInCat("income",cat.key,data.income[cat.key])}>
               {data.income[cat.key].map((e,i)=>(
                 <EntryRow key={e.id} entry={e}
                   selected={!!selected[selKey("income",cat.key,e.id)]}
@@ -542,7 +744,10 @@ function MonthView({ data, setData }) {
         <div>
           <div style={{fontWeight:800,fontSize:14,marginBottom:8,color:"#1f2937"}}>🔴 הוצאות</div>
           {EXPENSE_CATEGORIES.map((cat,ci)=>(
-            <SectionCard key={cat.key} title={cat.label} icon={cat.icon} color={EXPENSE_COLORS[ci]} total={calcNetEntries(data.expenses[cat.key])} onAdd={()=>add("expenses",cat.key)}>
+            <SectionCard key={cat.key} title={cat.label} icon={cat.icon} color={EXPENSE_COLORS[ci]} total={calcNetEntries(data.expenses[cat.key])} onAdd={()=>add("expenses",cat.key)}
+              allSelected={isCatAllSelected("expenses",cat.key,data.expenses[cat.key])}
+              someSelected={isCatSomeSelected("expenses",cat.key,data.expenses[cat.key])}
+              onSelectAll={()=>toggleSelectAllInCat("expenses",cat.key,data.expenses[cat.key])}>
               {data.expenses[cat.key].map((e,i)=>(
                 <EntryRow key={e.id} entry={e}
                   selected={!!selected[selKey("expenses",cat.key,e.id)]}
@@ -1068,6 +1273,202 @@ function ClientView({clientList, allYears, onMerge}) {
   );
 }
 
+// ===================== EXPENSE ANALYSIS VIEW =====================
+function ExpenseAnalysis({ allYears }) {
+  const [selYears, setSelYears] = useState("all");
+
+  // Flatten all expenses across all years/months
+  const allExpenses = [];
+  const years = Object.keys(allYears).map(Number).sort();
+  years.forEach(yr=>{
+    if(selYears !== "all" && yr !== parseInt(selYears)) return;
+    allYears[yr].forEach((month, mi)=>{
+      ["fixed","variable"].forEach(cat=>{
+        (month.expenses[cat]||[]).forEach(e=>{
+          allExpenses.push({ name: e.name, net: parseFloat(e.net)||0, cat, yr, mi, status: e.status });
+        });
+      });
+    });
+  });
+
+  // Count active months (months with at least one expense)
+  const activeMonthsSet = new Set(allExpenses.map(e=>`${e.yr}-${e.mi}`));
+  const activeMonths = Math.max(activeMonthsSet.size, 1);
+
+  // Group by name
+  const byName = {};
+  allExpenses.forEach(e=>{
+    if(!e.name?.trim()) return;
+    if(!byName[e.name]) byName[e.name] = { total:0, count:0, months: new Set(), values:[] };
+    byName[e.name].total += e.net;
+    byName[e.name].count++;
+    byName[e.name].months.add(`${e.yr}-${e.mi}`);
+    byName[e.name].values.push(e.net);
+  });
+
+  const items = Object.entries(byName).map(([name, d])=>({
+    name,
+    total: d.total,
+    count: d.count,
+    monthCount: d.months.size,
+    avg: d.total / d.months.size,
+    recurrence: d.months.size / activeMonths,
+    variance: d.values.length > 1 ? Math.sqrt(d.values.reduce((s,v)=>(s + Math.pow(v - d.total/d.values.length, 2)),0) / d.values.length) : 0,
+  })).sort((a,b)=>b.total-a.total);
+
+  const totalExpenses = allExpenses.reduce((s,e)=>s+e.net, 0);
+  const monthlyAvg = totalExpenses / activeMonths;
+  const topItems = items.slice(0, 5);
+  const recurring = items.filter(i=>i.recurrence >= 0.7).sort((a,b)=>b.total-a.total);
+  const savings = items.filter(i=>i.recurrence < 0.7 && i.total > 500).sort((a,b)=>b.total-a.total);
+
+  const card = (bg, border) => ({ background: bg, border: `1.5px solid ${border}`, borderRadius: 14, padding: "16px 20px" });
+  const fmt = n => "₪" + Math.round(n).toLocaleString("he-IL");
+
+  // Simple bar chart
+  function MiniBar({ value, max, color }) {
+    const pct = Math.min((value/max)*100, 100);
+    return <div style={{background:"#f1f5f9",borderRadius:4,height:8,width:"100%",overflow:"hidden"}}>
+      <div style={{width:`${pct}%`,height:"100%",background:color,borderRadius:4,transition:"width 0.4s"}}/>
+    </div>;
+  }
+
+  const recurrenceColor = r => r>=0.9?"#16a34a":r>=0.6?"#b45309":"#6b7280";
+  const recurrenceLabel = r => r>=0.9?"קבועה":r>=0.6?"רוב החודשים":"לא קבועה";
+
+  return (
+    <div style={{padding:"20px 24px",fontFamily:"inherit",direction:"rtl",maxWidth:1100,margin:"0 auto"}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:10}}>
+        <div>
+          <div style={{fontSize:20,fontWeight:800,color:"#0f172a"}}>🔍 ניתוח הוצאות חכם</div>
+          <div style={{fontSize:13,color:"#6b7280",marginTop:3}}>זיהוי דפוסים, חוזרות, והזדמנויות חיסכון</div>
+        </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{fontSize:12,color:"#6b7280",fontWeight:600}}>סינון:</span>
+          {["all",...years].map(y=>(
+            <button key={y} onClick={()=>setSelYears(String(y))}
+              style={{padding:"6px 14px",borderRadius:20,border:"1.5px solid",borderColor:selYears===String(y)?"#6366f1":"#e2e8f0",background:selYears===String(y)?"#6366f1":"#fff",color:selYears===String(y)?"#fff":"#374151",fontWeight:selYears===String(y)?700:500,fontSize:13,cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s"}}>
+              {y==="all"?"כל השנים":y}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* KPI Row */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:24}}>
+        {[
+          { label:"סה״כ הוצאות", value: fmt(totalExpenses), icon:"💸", bg:"#fef2f2", border:"#fecaca" },
+          { label:"ממוצע חודשי", value: fmt(monthlyAvg), icon:"📅", bg:"#fff7ed", border:"#fed7aa" },
+          { label:"הוצאות קבועות", value: fmt(recurring.reduce((s,i)=>s+i.avg,0)), icon:"📌", bg:"#f0fdf4", border:"#bbf7d0" },
+          { label:"הוצאות לא קבועות", value: fmt(savings.reduce((s,i)=>s+i.avg,0)), icon:"⚡", bg:"#fefce8", border:"#fde68a" },
+        ].map((k,i)=>(
+          <div key={i} style={card(k.bg, k.border)}>
+            <div style={{fontSize:22}}>{k.icon}</div>
+            <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>{k.label}</div>
+            <div style={{fontSize:20,fontWeight:800,color:"#0f172a",marginTop:2}}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
+        {/* Top expenses */}
+        <div style={{...card("#fff","#e2e8f0")}}>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:"#0f172a"}}>🏆 הוצאות הגדולות ביותר</div>
+          {topItems.map((item,i)=>(
+            <div key={i} style={{marginBottom:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{background:"#6366f1",color:"#fff",borderRadius:"50%",width:20,height:20,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{i+1}</span>
+                  <span style={{fontSize:13,fontWeight:600,color:"#1e293b"}}>{item.name}</span>
+                </div>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#ef4444"}}>{fmt(item.total)}</div>
+                  <div style={{fontSize:10,color:"#94a3b8"}}>ממוצע {fmt(item.avg)}/חודש</div>
+                </div>
+              </div>
+              <MiniBar value={item.total} max={topItems[0].total} color="#6366f1"/>
+            </div>
+          ))}
+        </div>
+
+        {/* Recurring expenses */}
+        <div style={{...card("#fff","#e2e8f0")}}>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:"#0f172a"}}>🔁 הוצאות חוזרות</div>
+          {recurring.slice(0,6).map((item,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:i<recurring.slice(0,6).length-1?"1px solid #f1f5f9":"none"}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:600,color:"#1e293b"}}>{item.name}</div>
+                <div style={{fontSize:11,color:recurrenceColor(item.recurrence),fontWeight:600,marginTop:2}}>
+                  {recurrenceLabel(item.recurrence)} · {item.monthCount} חודשים
+                </div>
+              </div>
+              <div style={{textAlign:"left"}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{fmt(item.avg)}/חודש</div>
+                <div style={{fontSize:10,color:"#94a3b8"}}>סה״כ {fmt(item.total)}</div>
+              </div>
+            </div>
+          ))}
+          {recurring.length === 0 && <div style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:20}}>אין הוצאות חוזרות</div>}
+        </div>
+      </div>
+
+      {/* Savings opportunities */}
+      <div style={{...card("#fffbeb","#fde68a"),marginBottom:20}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:4,color:"#92400e"}}>💡 הזדמנויות חיסכון פוטנציאליות</div>
+        <div style={{fontSize:12,color:"#b45309",marginBottom:14}}>הוצאות גבוהות שאינן קבועות — כדאי לבחון אותן</div>
+        {savings.length === 0 ? (
+          <div style={{color:"#6b7280",fontSize:13,padding:"10px 0"}}>✅ לא נמצאו הוצאות חריגות לא קבועות</div>
+        ) : (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}}>
+            {savings.slice(0,6).map((item,i)=>(
+              <div key={i} style={{background:"#fff",borderRadius:10,padding:"12px 14px",border:"1px solid #fde68a"}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#1e293b",marginBottom:4}}>{item.name}</div>
+                <div style={{fontSize:12,color:"#6b7280"}}>הופיע {item.monthCount} פעמים בלבד</div>
+                <div style={{fontSize:15,fontWeight:800,color:"#ef4444",marginTop:6}}>{fmt(item.total)}</div>
+                <div style={{fontSize:11,color:"#94a3b8"}}>ממוצע {fmt(item.avg)} לאירוע</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Full table */}
+      <div style={{...card("#fff","#e2e8f0")}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:"#0f172a"}}>📋 כל ההוצאות — פירוט מלא</div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr style={{background:"#f8fafc"}}>
+                {["שם","סה״כ","ממוצע/חודש","חודשים","תדירות","שונות"].map(h=>(
+                  <th key={h} style={{padding:"8px 12px",textAlign:"right",fontWeight:700,color:"#374151",borderBottom:"2px solid #e5e7eb"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item,i)=>(
+                <tr key={i} style={{borderBottom:"1px solid #f1f5f9",background:i%2===0?"#fff":"#f8fafc"}}>
+                  <td style={{padding:"8px 12px",fontWeight:600,color:"#1e293b"}}>{item.name}</td>
+                  <td style={{padding:"8px 12px",fontWeight:700,color:"#ef4444"}}>{fmt(item.total)}</td>
+                  <td style={{padding:"8px 12px",color:"#374151"}}>{fmt(item.avg)}</td>
+                  <td style={{padding:"8px 12px",color:"#6b7280"}}>{item.monthCount}</td>
+                  <td style={{padding:"8px 12px"}}>
+                    <span style={{background:recurrenceColor(item.recurrence)+"22",color:recurrenceColor(item.recurrence),borderRadius:6,padding:"2px 8px",fontWeight:600,fontSize:11}}>
+                      {Math.round(item.recurrence*100)}% · {recurrenceLabel(item.recurrence)}
+                    </span>
+                  </td>
+                  <td style={{padding:"8px 12px",color:"#6b7280"}}>{item.variance > 0 ? `±${fmt(item.variance)}` : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {items.length === 0 && <div style={{textAlign:"center",color:"#94a3b8",padding:30}}>אין נתוני הוצאות להצגה</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===================== ACCOUNTS RECEIVABLE / COLLECTIONS VIEW =====================
 function ARView({ allYears, onUpdateEntry }) {
   const [filterStatus, setFilterStatus] = useState("unpaid-pending");
@@ -1581,6 +1982,9 @@ export default function App() {
   const [dbLoaded, setDbLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  const [undoStack, setUndoStack] = useState([]); // [{snapshot, label}]
+  const [undoToast, setUndoToast] = useState(null); // {label}
+  const [confirm, confirmDialog] = useConfirm();
 
   // Load from Supabase on mount
   useEffect(()=>{
@@ -1606,7 +2010,22 @@ export default function App() {
 
   const years = Object.keys(allYears).map(Number).sort();
 
-  // Resolve a name to its canonical form
+  // Save snapshot for undo (call BEFORE the destructive action)
+  function saveSnapshot(label) {
+    const snapshot = JSON.parse(JSON.stringify(allYears));
+    setUndoStack(s=>[{snapshot,label},...s].slice(0,20));
+    setUndoToast({label});
+  }
+  function performUndo() {
+    setUndoStack(s=>{
+      if(s.length===0) return s;
+      setAllYears(s[0].snapshot);
+      return s.slice(1);
+    });
+    setUndoToast(null);
+  }
+
+
   function resolveName(name) {
     for(const [canonical, aliases] of Object.entries(nameAliases)) {
       if(aliases.includes(name)) return canonical;
@@ -1634,6 +2053,51 @@ export default function App() {
     });
   }
 
+  function importCSV(text) {
+    const lines = text.trim().split("\n").filter(l=>l.trim());
+    if(lines.length < 2) return alert("הקובץ ריק או לא תקין");
+    // Skip header row
+    const rows = lines.slice(1);
+    let imported = 0, errors = 0;
+    const newYears = JSON.parse(JSON.stringify(allYears));
+
+    rows.forEach(line=>{
+      // Support comma or semicolon separator
+      const sep = line.includes(";") ? ";" : ",";
+      const cols = line.split(sep).map(c=>c.trim().replace(/^"|"$/g,""));
+      const [yr, mo, type, cat, name, amount, status] = cols;
+      const year = parseInt(yr);
+      const month = parseInt(mo) - 1; // 0-indexed
+      const net = parseFloat(amount?.replace(/[^\d.]/g,""));
+
+      if(!year || isNaN(month) || month<0 || month>11 || !name || isNaN(net)) { errors++; return; }
+
+      // Ensure year exists
+      if(!newYears[year]) newYears[year] = Array.from({length:12}, initMonth);
+
+      const isIncome = type?.includes("הכנסה") || type?.toLowerCase().includes("income");
+      const isExpense = type?.includes("הוצאה") || type?.toLowerCase().includes("expense");
+
+      // Map category
+      const catMap = {
+        "ריטיינר":"retainers","שותפויות":"partnerships","משתנה":"variable","חד פעמי":"onetime","אפיליאציה":"affiliate",
+        "קבועות":"fixed","משתנות":"variable",
+        "retainers":"retainers","partnerships":"partnerships","onetime":"onetime","affiliate":"affiliate","fixed":"fixed"
+      };
+      const catKey = catMap[cat?.trim()] || (isIncome ? "variable" : "variable");
+      const statusMap = {"שולם":"paid","ממתין":"pending","לא שולם":"unpaid","paid":"paid","pending":"pending","unpaid":"unpaid"};
+      const entryStatus = statusMap[status?.trim()] || "paid";
+
+      const entry = newEntry(name, String(net), entryStatus);
+      if(isIncome) newYears[year][month].income[catKey].push(entry);
+      else if(isExpense) newYears[year][month].expenses[catKey].push(entry);
+      else { errors++; return; }
+      imported++;
+    });
+
+    setAllYears(newYears);
+    alert(`✅ יובאו ${imported} רשומות בהצלחה${errors ? `\n⚠️ ${errors} שורות לא תקינות דולגו` : ""}`);
+  }
   function setMonthData(year, mi, upd) {
     setAllYears(ay=>{const ms=[...ay[year]];ms[mi]=typeof upd==="function"?upd(ms[mi]):upd;return{...ay,[year]:ms};});
   }
@@ -1684,11 +2148,19 @@ export default function App() {
 
   const unpaidCount = Object.values(allYears).flatMap(ms=>ms.flatMap(m=>[...INCOME_CATEGORIES,...EXPENSE_CATEGORIES].flatMap(cat=>m[INCOME_CATEGORIES.includes(cat)?"income":"expenses"][cat.key]))).filter(e=>e.status==="unpaid"&&e.name&&e.net).length;
 
-  const TABS = [{k:"month",l:"חודשי"},{k:"year",l:"סיכום שנתי"},{k:"multi",l:"השוואה שנתית"},{k:"ar",l:`תגבייה${unpaidCount?` 🔴${unpaidCount}`:""}`},{k:"clients",l:"פילוח לקוחות"},{k:"alerts",l:`התראות${alerts.length?` (${alerts.length})`:""}`}];
+  const TABS = [{k:"month",l:"חודשי"},{k:"year",l:"סיכום שנתי"},{k:"multi",l:"השוואה שנתית"},{k:"expenses",l:"ניתוח הוצאות 🔍"},{k:"ar",l:`תגבייה${unpaidCount?` 🔴${unpaidCount}`:""}`},{k:"clients",l:"פילוח לקוחות"},{k:"alerts",l:`התראות${alerts.length?` (${alerts.length})`:""}`}];
 
   injectCSS();
   return (
     <div style={{minHeight:"100vh",background:"#f1f5f9",fontFamily:"'Segoe UI',Arial,sans-serif",direction:"rtl"}}>
+      {confirmDialog}
+      {undoToast && (
+        <UndoToast
+          action={`בוטל: ${undoToast.label}`}
+          onUndo={performUndo}
+          onDismiss={()=>setUndoToast(null)}
+        />
+      )}
       {/* Header */}
       <div className="header-pad" style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
         <div>
@@ -1701,9 +2173,27 @@ export default function App() {
           ) : lastSaved ? (
             <div style={{background:"#dcfce7",borderRadius:10,padding:"5px 10px",color:"#16a34a",fontSize:11,fontWeight:700}}>✅ נשמר {lastSaved}</div>
           ) : null}
+          {undoStack.length > 0 && (
+            <button onClick={performUndo} style={{background:"#334155",border:"1.5px solid #475569",color:"#e2e8f0",borderRadius:8,padding:"5px 11px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+              ↩ ביטול ({undoStack.length})
+            </button>
+          )}
           {alerts.length>0 && <div style={{background:"#fee2e2",borderRadius:10,padding:"5px 10px",color:"#dc2626",fontSize:12,fontWeight:700}}>⚠️ {alerts.length}</div>}
           <button onClick={addYear} style={{background:"#3b82f6",border:"none",color:"#fff",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ שנה</button>
-          <button onClick={()=>{if(confirm("למחוק את כל הנתונים ולחזור לברירת מחדל?")){localStorage.clear();window.location.reload();}}} style={{background:"#475569",border:"none",color:"#fff",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>↺ איפוס</button>
+          <label style={{background:"#10b981",border:"none",color:"#fff",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+            📥 ייבוא CSV
+            <input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>{
+              const file = e.target.files[0]; if(!file) return;
+              const reader = new FileReader();
+              reader.onload = ev => importCSV(ev.target.result);
+              reader.readAsText(file, "UTF-8");
+              e.target.value = "";
+            }}/>
+          </label>
+          <button onClick={async()=>{
+            const ok = await confirm({title:"איפוס כל הנתונים",message:"פעולה זו תמחק את כל הנתונים לצמיתות ותחזיר לברירת המחדל. לא ניתן לבטל פעולה זו.",confirmLabel:"מחק הכל",confirmColor:"#ef4444"});
+            if(ok){localStorage.clear();window.location.reload();}
+          }} style={{background:"#475569",border:"none",color:"#fff",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>↺ איפוס</button>
         </div>
       </div>
 
@@ -1737,9 +2227,10 @@ export default function App() {
           </div>
         )}
 
-        {tab==="month" && <MonthView data={allYears[selYear][selMonth]} setData={u=>setMonthData(selYear,selMonth,u)}/>}
+        {tab==="month" && <MonthView data={allYears[selYear][selMonth]} setData={u=>setMonthData(selYear,selMonth,u)} allYears={allYears} setAllYears={setAllYears} currentYear={selYear} currentMonth={selMonth} onConfirm={confirm} onSaveSnapshot={saveSnapshot}/>}
         {tab==="year" && <YearSummary months={allYears[selYear]} year={selYear}/>}
         {tab==="multi" && <MultiYear allYears={allYears}/>}
+        {tab==="expenses" && <ExpenseAnalysis allYears={allYears}/>}
         {tab==="ar" && <ARView allYears={allYears} onUpdateEntry={updateEntry}/>}
         {tab==="clients" && <ClientView clientList={clientList} allYears={allYears} onMerge={mergeClientNames}/>}
         {tab==="alerts" && (
