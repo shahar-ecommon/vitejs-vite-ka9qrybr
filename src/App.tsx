@@ -41,7 +41,7 @@ const EXPENSE_CATEGORIES = [
 ];
 const STATUS_OPTIONS = [
   { value: "paid", label: "שולם", color: "#16a34a", bg: "#dcfce7" },
-  { value: "pending", label: "ממתין", color: "#b45309", bg: "#fef3c7" },
+  { value: "pending", label: "נשלחה חשבונית", color: "#b45309", bg: "#fef3c7" },
   { value: "unpaid", label: "לא שולם", color: "#dc2626", bg: "#fee2e2" },
 ];
 const INCOME_COLORS = ["#6366f1","#0ea5e9","#10b981","#f59e0b","#ec4899"];
@@ -268,6 +268,8 @@ function injectCSS() {
   style.textContent = `
     * { box-sizing: border-box; }
     body { margin:0; }
+    input, select, textarea { color: #1e293b !important; }
+    input::placeholder { color: #94a3b8 !important; }
     .rsp-kpi-7 { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
     .rsp-kpi-5 { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
     .rsp-kpi-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
@@ -421,7 +423,7 @@ function EntryRow({ entry, onChange, onRemove, selected, onSelect }) {
     <div style={{...rowBase,display:"flex",gap:5,alignItems:"center"}}>
       <input type="checkbox" checked={selected} onChange={onSelect} style={{cursor:"pointer",accentColor:"#6366f1",width:14,height:14,flexShrink:0}}/>
       <input value={entry.name} onChange={e=>onChange({...entry,name:e.target.value})} placeholder="שם" dir="rtl"
-        style={{flex:2,border:"1.5px solid #e5e7eb",borderRadius:6,padding:"3px 7px",fontSize:12,fontFamily:"inherit",background:"#fafafa",minWidth:0}}/>
+        style={{flex:2,border:"1.5px solid #e5e7eb",borderRadius:6,padding:"3px 7px",fontSize:12,fontFamily:"inherit",background:"#fafafa",minWidth:0,color:"#1e293b"}}/>
       {vatMode==="gross"?(
         <input value={String(displayGross||"")} onChange={e=>handleGrossChange(e.target.value)} placeholder="ברוטו" dir="ltr"
           style={{width:72,border:"1.5px solid #bbf7d0",borderRadius:6,padding:"3px 6px",fontSize:12,fontFamily:"inherit",background:"#f0fdf4",textAlign:"right"}}/>
@@ -555,7 +557,7 @@ function SectionCard({ title, icon, color, total, children, onAdd, allSelected, 
             checked={allSelected}
             ref={el=>{ if(el) el.indeterminate = someSelected && !allSelected; }}
             onChange={onSelectAll}
-            style={{cursor:"pointer",accentColor:color,width:14,height:14,flexShrink:0}}
+            style={{cursor:"pointer",accentColor:color,width:14,height:14,flexShrink:0,opacity: 0.8}}
             title="סמן הכל בקטגוריה"/>
           <span style={{fontWeight:700,fontSize:13,color:"#1f2937"}}>{icon} {title}</span>
         </div>
@@ -1009,7 +1011,7 @@ function ClientDetail({client, allYears, onClose}) {
             {/* Status breakdown */}
             <div style={{background:"#f8fafc",borderRadius:12,padding:"14px 16px"}}>
               <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>✅ סטטוס תשלומים</div>
-              {[{k:"paid",l:"שולם",c:"#16a34a",bg:"#dcfce7"},{k:"pending",l:"ממתין",c:"#b45309",bg:"#fef3c7"},{k:"unpaid",l:"לא שולם",c:"#dc2626",bg:"#fee2e2"}].map(s=>(
+              {[{k:"paid",l:"שולם",c:"#16a34a",bg:"#dcfce7"},{k:"pending",l:"נשלחה חשבונית",c:"#b45309",bg:"#fef3c7"},{k:"unpaid",l:"לא שולם",c:"#dc2626",bg:"#fee2e2"}].map(s=>(
                 <div key={s.k} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <span style={{padding:"2px 8px",borderRadius:9999,background:s.bg,color:s.c,fontSize:11,fontWeight:700,minWidth:60,textAlign:"center"}}>{s.l}</span>
                   <MiniBar value={statusCount[s.k]} max={client.months.length} color={s.c} height={8}/>
@@ -1573,7 +1575,7 @@ function ARView({ allYears, onUpdateEntry }) {
         {[
           {l:"סה״כ חוב פתוח",    v:fmt(totalOpen),    sub:`${countUnpaid+countPending} רשומות`,  c:"#dc2626", bg:"#fee2e2", icon:"🔴"},
           {l:"לא שולם",           v:fmt(totalUnpaid),  sub:`${countUnpaid} רשומות`,               c:"#b91c1c", bg:"#fecaca", icon:"❌"},
-          {l:"ממתין לאישור",      v:fmt(totalPending), sub:`${countPending} רשומות`,              c:"#b45309", bg:"#fef3c7", icon:"🟡"},
+          {l:"נשלחה חשבונית",      v:fmt(totalPending), sub:`${countPending} רשומות`,              c:"#b45309", bg:"#fef3c7", icon:"🟡"},
           {l:"שולם (היסטורי)",   v:fmt(totalPaid),    sub:"כל הזמנים",                           c:"#16a34a", bg:"#dcfce7", icon:"✅"},
         ].map(k=>(
           <div key={k.l} style={{background:k.bg,borderRadius:12,padding:"14px 16px",border:`1.5px solid ${k.c}22`}}>
@@ -1590,7 +1592,7 @@ function ARView({ allYears, onUpdateEntry }) {
           dir="rtl" style={{flex:"1 1 130px",minWidth:120,border:"1.5px solid #e5e7eb",borderRadius:8,padding:"6px 10px",fontSize:12,fontFamily:"inherit",background:"#f9fafb"}}/>
 
         <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-          {[{k:"unpaid-pending",l:"חובות פתוחים"},{k:"unpaid",l:"לא שולם"},{k:"pending",l:"ממתין"},{k:"all",l:"הכל"}].map(s=>(
+          {[{k:"unpaid-pending",l:"חובות פתוחים"},{k:"unpaid",l:"לא שולם"},{k:"pending",l:"נשלחה חשבונית"},{k:"all",l:"הכל"}].map(s=>(
             <button key={s.k} onClick={()=>setFilterStatus(s.k)}
               style={{padding:"5px 11px",borderRadius:7,border:"1.5px solid",borderColor:filterStatus===s.k?"#6366f1":"#e5e7eb",background:filterStatus===s.k?"#6366f1":"#fff",color:filterStatus===s.k?"#fff":"#374151",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
               {s.l}
@@ -1992,7 +1994,10 @@ export default function App() {
       if(saved?.allYears) setAllYears(saved.allYears);
       if(saved?.nameAliases) setNameAliases(saved.nameAliases);
       setDbLoaded(true);
-    }).catch(()=>setDbLoaded(true));
+    }).catch(e=>{
+      console.error("Supabase load error:", e);
+      setDbLoaded(true);
+    });
   }, []);
 
   // Auto-save to Supabase 2 seconds after last change
@@ -2085,7 +2090,7 @@ export default function App() {
         "retainers":"retainers","partnerships":"partnerships","onetime":"onetime","affiliate":"affiliate","fixed":"fixed"
       };
       const catKey = catMap[cat?.trim()] || (isIncome ? "variable" : "variable");
-      const statusMap = {"שולם":"paid","ממתין":"pending","לא שולם":"unpaid","paid":"paid","pending":"pending","unpaid":"unpaid"};
+      const statusMap = {"שולם":"paid","ממתין":"pending","נשלחה חשבונית":"pending","לא שולם":"unpaid","paid":"paid","pending":"pending","unpaid":"unpaid"};
       const entryStatus = statusMap[status?.trim()] || "paid";
 
       const entry = newEntry(name, String(net), entryStatus);
@@ -2151,6 +2156,17 @@ export default function App() {
   const TABS = [{k:"month",l:"חודשי"},{k:"year",l:"סיכום שנתי"},{k:"multi",l:"השוואה שנתית"},{k:"expenses",l:"ניתוח הוצאות 🔍"},{k:"ar",l:`תגבייה${unpaidCount?` 🔴${unpaidCount}`:""}`},{k:"clients",l:"פילוח לקוחות"},{k:"alerts",l:`התראות${alerts.length?` (${alerts.length})`:""}`}];
 
   injectCSS();
+
+  if(!dbLoaded) return (
+    <div style={{minHeight:"100vh",background:"#0f172a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,fontFamily:"'Segoe UI',Arial,sans-serif"}}>
+      <div style={{fontSize:32}}>📋</div>
+      <div style={{color:"#f1f5f9",fontSize:18,fontWeight:700}}>מעקב פיננסי עסקי</div>
+      <div style={{color:"#94a3b8",fontSize:13}}>טוען נתונים...</div>
+      <div style={{width:40,height:40,border:"3px solid #334155",borderTopColor:"#6366f1",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
   return (
     <div style={{minHeight:"100vh",background:"#f1f5f9",fontFamily:"'Segoe UI',Arial,sans-serif",direction:"rtl"}}>
       {confirmDialog}
