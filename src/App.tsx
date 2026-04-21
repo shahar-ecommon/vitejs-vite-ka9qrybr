@@ -40,9 +40,10 @@ const EXPENSE_CATEGORIES = [
   { key: "variable", label: "הוצאות משתנות", icon: "📉" },
 ];
 const STATUS_OPTIONS = [
-  { value: "paid", label: "שולם", color: "#16a34a", bg: "#dcfce7" },
-  { value: "pending", label: "נשלחה חשבונית", color: "#b45309", bg: "#fef3c7" },
-  { value: "unpaid", label: "לא שולם", color: "#dc2626", bg: "#fee2e2" },
+  { value: "paid",     label: "שולם",              color: "#16a34a", bg: "#dcfce7" },
+  { value: "invoice",  label: "תישלח חשבונית",     color: "#7c3aed", bg: "#ede9fe" },
+  { value: "pending",  label: "נשלחה חשבונית",     color: "#b45309", bg: "#fef3c7" },
+  { value: "unpaid",   label: "לא שולם",            color: "#dc2626", bg: "#fee2e2" },
 ];
 const INCOME_COLORS = ["#6366f1","#0ea5e9","#10b981","#f59e0b","#ec4899"];
 const EXPENSE_COLORS = ["#ef4444","#f97316"];
@@ -292,8 +293,10 @@ function injectCSS() {
       .entry-row-desktop { display:none; }
       .entry-row-mobile  { display:flex; }
       .page-pad { padding:10px 12px; }
-      .header-pad { padding:12px 14px; }
+      .header-pad { padding:10px 12px; }
       .hide-mobile { display:none; }
+      .tab-bar button { font-size:11px !important; padding:9px 8px !important; }
+      input, select { font-size:16px !important; } /* Prevents iOS zoom */
     }
   `;
   document.head.appendChild(style);
@@ -1011,7 +1014,7 @@ function ClientDetail({client, allYears, onClose}) {
             {/* Status breakdown */}
             <div style={{background:"#f8fafc",borderRadius:12,padding:"14px 16px"}}>
               <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>✅ סטטוס תשלומים</div>
-              {[{k:"paid",l:"שולם",c:"#16a34a",bg:"#dcfce7"},{k:"pending",l:"נשלחה חשבונית",c:"#b45309",bg:"#fef3c7"},{k:"unpaid",l:"לא שולם",c:"#dc2626",bg:"#fee2e2"}].map(s=>(
+              {[{k:"paid",l:"שולם",c:"#16a34a",bg:"#dcfce7"},{k:"invoice",l:"תישלח חשבונית",c:"#7c3aed",bg:"#ede9fe"},{k:"pending",l:"נשלחה חשבונית",c:"#b45309",bg:"#fef3c7"},{k:"unpaid",l:"לא שולם",c:"#dc2626",bg:"#fee2e2"}].map(s=>(
                 <div key={s.k} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <span style={{padding:"2px 8px",borderRadius:9999,background:s.bg,color:s.c,fontSize:11,fontWeight:700,minWidth:60,textAlign:"center"}}>{s.l}</span>
                   <MiniBar value={statusCount[s.k]} max={client.months.length} color={s.c} height={8}/>
@@ -1517,6 +1520,7 @@ function ARView({ allYears, onUpdateEntry }) {
     if(filterStatus==="unpaid-pending" && e.status==="paid") return false;
     if(filterStatus==="unpaid" && e.status!=="unpaid") return false;
     if(filterStatus==="pending" && e.status!=="pending") return false;
+    if(filterStatus==="invoice" && e.status!=="invoice") return false;
     if(search && !e.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
@@ -1532,10 +1536,12 @@ function ARView({ allYears, onUpdateEntry }) {
   // Summary stats
   const totalUnpaid  = allItems.filter(e=>e.status==="unpaid").reduce((s,e)=>s+e.net,0);
   const totalPending = allItems.filter(e=>e.status==="pending").reduce((s,e)=>s+e.net,0);
-  const totalOpen    = totalUnpaid + totalPending;
+  const totalInvoice = allItems.filter(e=>e.status==="invoice").reduce((s,e)=>s+e.net,0);
+  const totalOpen    = totalUnpaid + totalPending + totalInvoice;
   const totalPaid    = allItems.filter(e=>e.status==="paid").reduce((s,e)=>s+e.net,0);
   const countUnpaid  = allItems.filter(e=>e.status==="unpaid").length;
   const countPending = allItems.filter(e=>e.status==="pending").length;
+  const countInvoice = allItems.filter(e=>e.status==="invoice").length;
 
   // Group by client
   const byClient = {};
@@ -1573,9 +1579,10 @@ function ARView({ allYears, onUpdateEntry }) {
       {/* KPI Strip */}
       <div className="rsp-kpi-4" style={{marginBottom:16}}>
         {[
-          {l:"סה״כ חוב פתוח",    v:fmt(totalOpen),    sub:`${countUnpaid+countPending} רשומות`,  c:"#dc2626", bg:"#fee2e2", icon:"🔴"},
+          {l:"סה״כ חוב פתוח",    v:fmt(totalOpen),    sub:`${countUnpaid+countPending+countInvoice} רשומות`,  c:"#dc2626", bg:"#fee2e2", icon:"🔴"},
           {l:"לא שולם",           v:fmt(totalUnpaid),  sub:`${countUnpaid} רשומות`,               c:"#b91c1c", bg:"#fecaca", icon:"❌"},
-          {l:"נשלחה חשבונית",      v:fmt(totalPending), sub:`${countPending} רשומות`,              c:"#b45309", bg:"#fef3c7", icon:"🟡"},
+          {l:"נשלחה חשבונית",     v:fmt(totalPending), sub:`${countPending} רשומות`,              c:"#b45309", bg:"#fef3c7", icon:"🟡"},
+          {l:"תישלח חשבונית",     v:fmt(totalInvoice), sub:`${countInvoice} רשומות`,              c:"#7c3aed", bg:"#ede9fe", icon:"📋"},
           {l:"שולם (היסטורי)",   v:fmt(totalPaid),    sub:"כל הזמנים",                           c:"#16a34a", bg:"#dcfce7", icon:"✅"},
         ].map(k=>(
           <div key={k.l} style={{background:k.bg,borderRadius:12,padding:"14px 16px",border:`1.5px solid ${k.c}22`}}>
@@ -1592,7 +1599,7 @@ function ARView({ allYears, onUpdateEntry }) {
           dir="rtl" style={{flex:"1 1 130px",minWidth:120,border:"1.5px solid #e5e7eb",borderRadius:8,padding:"6px 10px",fontSize:12,fontFamily:"inherit",background:"#f9fafb"}}/>
 
         <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-          {[{k:"unpaid-pending",l:"חובות פתוחים"},{k:"unpaid",l:"לא שולם"},{k:"pending",l:"נשלחה חשבונית"},{k:"all",l:"הכל"}].map(s=>(
+          {[{k:"unpaid-pending",l:"חובות פתוחים"},{k:"unpaid",l:"לא שולם"},{k:"pending",l:"נשלחה חשבונית"},{k:"invoice",l:"תישלח חשבונית"},{k:"all",l:"הכל"}].map(s=>(
             <button key={s.k} onClick={()=>setFilterStatus(s.k)}
               style={{padding:"5px 11px",borderRadius:7,border:"1.5px solid",borderColor:filterStatus===s.k?"#6366f1":"#e5e7eb",background:filterStatus===s.k?"#6366f1":"#fff",color:filterStatus===s.k?"#fff":"#374151",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
               {s.l}
@@ -2000,6 +2007,19 @@ export default function App() {
     });
   }, []);
 
+  // Poll for updates every 30 seconds (sync between users)
+  useEffect(()=>{
+    if(!dbLoaded) return;
+    const interval = setInterval(()=>{
+      if(saving) return; // Don't reload while saving
+      dbLoad().then(saved=>{
+        if(saved?.allYears) setAllYears(saved.allYears);
+        if(saved?.nameAliases) setNameAliases(saved.nameAliases);
+      }).catch(()=>{});
+    }, 30000);
+    return ()=>clearInterval(interval);
+  }, [dbLoaded, saving]);
+
   // Auto-save to Supabase 2 seconds after last change
   useEffect(()=>{
     if(!dbLoaded) return;
@@ -2090,7 +2110,7 @@ export default function App() {
         "retainers":"retainers","partnerships":"partnerships","onetime":"onetime","affiliate":"affiliate","fixed":"fixed"
       };
       const catKey = catMap[cat?.trim()] || (isIncome ? "variable" : "variable");
-      const statusMap = {"שולם":"paid","ממתין":"pending","נשלחה חשבונית":"pending","לא שולם":"unpaid","paid":"paid","pending":"pending","unpaid":"unpaid"};
+      const statusMap = {"שולם":"paid","ממתין":"pending","נשלחה חשבונית":"pending","תישלח חשבונית":"invoice","לא שולם":"unpaid","paid":"paid","pending":"pending","invoice":"invoice","unpaid":"unpaid"};
       const entryStatus = statusMap[status?.trim()] || "paid";
 
       const entry = newEntry(name, String(net), entryStatus);
