@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 
 const SUPABASE_URL = "https://hbzqalhbkaojavxteelm.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhienFhbGhia2FvamF2eHRlZWxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMjkzMzQsImV4cCI6MjA4ODcwNTMzNH0.D77-lMvr5_v5J1Ycj7_t3rcNXEog9bgadVALnckvrLA";
@@ -551,7 +551,20 @@ function BulkToolbar({ count, onStatusChange, onDelete, onDeselect, onDuplicate 
   );
 }
 
-function SectionCard({ title, icon, color, total, children, onAdd, allSelected, someSelected, onSelectAll }) {
+function SectionCard({ title, icon, color, total, children, onAdd, allSelected, someSelected, onSelectAll, entries }) {
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  // Filter children based on statusFilter
+  const filteredChildren = statusFilter === "all" ? children :
+    React.Children.map(children, child => {
+      if(!child?.props?.entry) return child;
+      return child.props.entry.status === statusFilter ? child : null;
+    });
+
+  const counts = {};
+  (entries||[]).forEach(e=>{ counts[e.status] = (counts[e.status]||0)+1; });
+  const activeStatuses = STATUS_OPTIONS.filter(s=>counts[s.value]>0);
+
   return (
     <div style={{background:"#fff",borderRadius:12,border:`1.5px solid ${color}22`,boxShadow:"0 1px 6px rgba(0,0,0,0.04)",overflow:"hidden",marginBottom:10}}>
       <div style={{padding:"8px 12px",background:`${color}0e`,borderBottom:`1px solid ${color}20`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -560,14 +573,31 @@ function SectionCard({ title, icon, color, total, children, onAdd, allSelected, 
             checked={allSelected}
             ref={el=>{ if(el) el.indeterminate = someSelected && !allSelected; }}
             onChange={onSelectAll}
-            style={{cursor:"pointer",accentColor:color,width:14,height:14,flexShrink:0,opacity: 0.8}}
+            style={{cursor:"pointer",accentColor:color,width:14,height:14,flexShrink:0,opacity:0.8}}
             title="סמן הכל בקטגוריה"/>
           <span style={{fontWeight:700,fontSize:13,color:"#1f2937"}}>{icon} {title}</span>
         </div>
         <span style={{fontWeight:800,fontSize:13,color}}>{fmt(total)}</span>
       </div>
+      {activeStatuses.length > 1 && (
+        <div style={{padding:"6px 12px",borderBottom:`1px solid ${color}15`,display:"flex",gap:4,flexWrap:"wrap",background:`${color}05`}}>
+          <button onClick={()=>setStatusFilter("all")}
+            style={{padding:"2px 8px",borderRadius:9999,border:"1.5px solid",borderColor:statusFilter==="all"?color:"#e2e8f0",background:statusFilter==="all"?color+"22":"#fff",color:statusFilter==="all"?color:"#6b7280",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+            הכל ({entries?.length||0})
+          </button>
+          {activeStatuses.map(s=>(
+            <button key={s.value} onClick={()=>setStatusFilter(statusFilter===s.value?"all":s.value)}
+              style={{padding:"2px 8px",borderRadius:9999,border:"1.5px solid",borderColor:statusFilter===s.value?s.color:"#e2e8f0",background:statusFilter===s.value?s.bg:"#fff",color:statusFilter===s.value?s.color:"#6b7280",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+              {s.label} ({counts[s.value]})
+            </button>
+          ))}
+        </div>
+      )}
       <div style={{padding:"8px 12px"}}>
-        {children}
+        {filteredChildren}
+        {statusFilter !== "all" && filteredChildren?.filter(Boolean).length === 0 && (
+          <div style={{textAlign:"center",color:"#94a3b8",fontSize:12,padding:"8px 0"}}>אין פריטים בסטטוס זה</div>
+        )}
         <button onClick={onAdd} style={{background:"none",border:`1.5px dashed ${color}60`,color,borderRadius:7,padding:"3px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:600,marginTop:4}}>+ הוסף</button>
       </div>
     </div>
@@ -733,6 +763,7 @@ function MonthView({ data, setData, allYears, setAllYears, currentYear, currentM
           <div style={{fontWeight:800,fontSize:14,marginBottom:8,color:"#1f2937"}}>💚 הכנסות</div>
           {INCOME_CATEGORIES.map((cat,ci)=>(
             <SectionCard key={cat.key} title={cat.label} icon={cat.icon} color={INCOME_COLORS[ci]} total={calcNetEntries(data.income[cat.key])} onAdd={()=>add("income",cat.key)}
+              entries={data.income[cat.key]}
               allSelected={isCatAllSelected("income",cat.key,data.income[cat.key])}
               someSelected={isCatSomeSelected("income",cat.key,data.income[cat.key])}
               onSelectAll={()=>toggleSelectAllInCat("income",cat.key,data.income[cat.key])}>
@@ -750,6 +781,7 @@ function MonthView({ data, setData, allYears, setAllYears, currentYear, currentM
           <div style={{fontWeight:800,fontSize:14,marginBottom:8,color:"#1f2937"}}>🔴 הוצאות</div>
           {EXPENSE_CATEGORIES.map((cat,ci)=>(
             <SectionCard key={cat.key} title={cat.label} icon={cat.icon} color={EXPENSE_COLORS[ci]} total={calcNetEntries(data.expenses[cat.key])} onAdd={()=>add("expenses",cat.key)}
+              entries={data.expenses[cat.key]}
               allSelected={isCatAllSelected("expenses",cat.key,data.expenses[cat.key])}
               someSelected={isCatSomeSelected("expenses",cat.key,data.expenses[cat.key])}
               onSelectAll={()=>toggleSelectAllInCat("expenses",cat.key,data.expenses[cat.key])}>
